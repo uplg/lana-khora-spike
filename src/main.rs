@@ -20,6 +20,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use khora_sdk::khora_core::lane::{ColorTarget, Lane, LaneContext, Slot};
+use khora_sdk::khora_core::platform::KhoraWindow;
 use khora_sdk::khora_core::renderer::GraphicsDevice;
 use khora_sdk::khora_core::renderer::api::core::FrameContext;
 use khora_sdk::khora_core::renderer::traits::CommandEncoder;
@@ -65,17 +66,12 @@ impl Orbit {
         )
     }
 
-    fn view_proj(&self) -> (Mat4, Vec3) {
+    fn view_proj(&self, aspect: f32) -> (Mat4, Vec3) {
         let eye = self.eye();
         let view = Mat4::look_at_rh(eye, Vec3::new(0.0, self.target_y, 0.0), Vec3::Y)
             .unwrap_or(Mat4::IDENTITY);
         // Bevy's Camera3d default perspective fov is FRAC_PI_4 (45°).
-        let proj = Mat4::perspective_rh_zo(
-            std::f32::consts::FRAC_PI_4,
-            WIN_W as f32 / WIN_H as f32,
-            0.05,
-            100.0,
-        );
+        let proj = Mat4::perspective_rh_zo(std::f32::consts::FRAC_PI_4, aspect, 0.05, 100.0);
         (proj * view, eye)
     }
 }
@@ -205,6 +201,9 @@ struct LanaKhora {
     cam: Orbit,
     start: Instant,
     frames: u64,
+    /// Current window aspect (w/h), refreshed every frame in `before_frame`
+    /// so a resize doesn't squash the avatar.
+    aspect: f32,
     /// Constant material params (lana-avatar's PointMaterial p/q/r/s).
     p: [f32; 4],
     q: [f32; 4],
@@ -261,6 +260,7 @@ impl EngineApp for LanaKhora {
             },
             start: Instant::now(),
             frames: 0,
+            aspect: WIN_W as f32 / WIN_H as f32,
             p,
             q,
             r,
@@ -269,6 +269,20 @@ impl EngineApp for LanaKhora {
     }
 
     fn setup(&mut self, _world: &mut GameWorld, _runtime: &Runtime) {}
+
+    // Refresh the aspect from the live window every frame so a resize
+    // rescales the projection instead of squashing the avatar.
+    fn before_frame(
+        &mut self,
+        _world: &mut GameWorld,
+        _runtime: &Runtime,
+        window: &dyn KhoraWindow,
+    ) {
+        let (w, h) = window.inner_size();
+        if w > 0 && h > 0 {
+            self.aspect = w as f32 / h as f32;
+        }
+    }
 
     fn update(&mut self, _world: &mut GameWorld, inputs: &[InputEvent]) {
         // No auto-spin: the camera stays put (face-framed) unless the user
@@ -342,7 +356,7 @@ impl EngineApp for LanaKhora {
         // Per-frame uniform: orbit camera + time. Material params (p/q/r/s)
         // are constant; openness (p.x) stays 0 — idle, like lana-avatar
         // when not speaking (no audio in this viz).
-        let (vp, eye) = self.cam.view_proj();
+        let (vp, eye) = self.cam.view_proj(self.aspect);
         let t = self.start.elapsed().as_secs_f32();
         let globals = Globals {
             view_proj: vp.to_cols_array_2d(),

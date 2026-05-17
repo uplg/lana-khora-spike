@@ -127,5 +127,21 @@ skip; the spike silences that module.
    aesthetic; the single biggest gap for adopting Khora here.
 4. **Lower the `Occluded` log from `ERROR` to `DEBUG`/`TRACE`** — it is
    normal window behaviour, not an error.
-5. **Expose window size/aspect** to `before_agents`/`after_agents` (the
-   spike hardcodes aspect; `FrameContext` carries no dimensions).
+5. **Expose window size/aspect to `before_agents`/`after_agents`.** The
+   spike gets the live size from `before_frame`'s `&dyn KhoraWindow`
+   (`inner_size()`) and caches the aspect, so resizing rescales correctly
+   — but the render hooks (`before_agents`/`after_agents`) get no window
+   and `FrameContext` carries no dimensions, so any per-frame render code
+   needs that side channel. Putting the surface extent in `FrameContext`
+   would remove the dance.
+
+## License
+
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option — same as Lana itself. KhoraEngine is consumed only as a
+Cargo git dependency (not redistributed here); its Apache-2.0 terms apply
+to the engine, not to this code.
