@@ -96,6 +96,18 @@ does not. The spike sidesteps it entirely by injecting from
 `after_agents` and submitting the command buffer directly to the device
 queue, bypassing the frame graph.
 
+**Stale-target gotcha (consequence of the out-of-band submit).**
+`EngineCore::begin_render_frame` inserts `ColorTarget`/`DepthTarget` into
+`FrameContext` on success but **does not remove them on failure**
+(`begin_frame` returning Outdated/Timeout/Occluded — happens sporadically,
+not only on resize). The hooks still fire, so an external submitter reads
+a stale `ColorTarget` whose surface texture was already presented and
+destroyed → a non-fatal but spammy `Queue::submit` "Texture has been
+destroyed" validation error. The spike guards against it by tracking the
+`TextureViewId`: a successful `begin_frame` always registers a fresh id,
+so an unchanged id means "skip this frame". A clean engine fix would be
+for `begin_render_frame` to clear those `FrameContext` entries on failure.
+
 ### 3. Capability gap — no HDR / bloom (the real long pole)
 
 KhoraEngine has **no HDR offscreen target, bright-pass, blur, bloom
@@ -127,7 +139,12 @@ skip; the spike silences that module.
    aesthetic; the single biggest gap for adopting Khora here.
 4. **Lower the `Occluded` log from `ERROR` to `DEBUG`/`TRACE`** — it is
    normal window behaviour, not an error.
-5. **Expose window size/aspect to `before_agents`/`after_agents`.** The
+5. **`begin_render_frame` should clear `ColorTarget`/`DepthTarget` from
+   `FrameContext` on failure** (currently only set on success, never
+   removed). A stale target survives a failed `begin_frame`, so any
+   per-frame consumer submits against an already-presented, destroyed
+   surface texture. See finding #2.
+6. **Expose window size/aspect to `before_agents`/`after_agents`.** The
    spike gets the live size from `before_frame`'s `&dyn KhoraWindow`
    (`inner_size()`) and caches the aspect, so resizing rescales correctly
    — but the render hooks (`before_agents`/`after_agents`) get no window

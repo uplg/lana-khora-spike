@@ -23,6 +23,7 @@ use khora_sdk::khora_core::lane::{ColorTarget, Lane, LaneContext, Slot};
 use khora_sdk::khora_core::platform::KhoraWindow;
 use khora_sdk::khora_core::renderer::GraphicsDevice;
 use khora_sdk::khora_core::renderer::api::core::FrameContext;
+use khora_sdk::khora_core::renderer::api::resource::TextureViewId;
 use khora_sdk::khora_core::renderer::traits::CommandEncoder;
 use khora_sdk::prelude::math::{Mat4, Vec3};
 use khora_sdk::prelude::{InputEvent, MouseButton};
@@ -204,6 +205,12 @@ struct LanaKhora {
     /// Current window aspect (w/h), refreshed every frame in `before_frame`
     /// so a resize doesn't squash the avatar.
     aspect: f32,
+    /// ColorTarget id we last submitted against. A successful `begin_frame`
+    /// registers a fresh surface-view id every frame; a failed one
+    /// (Outdated/Timeout/Occluded) leaves the FrameContext's stale id
+    /// (whose texture was already presented). Skipping when the id is
+    /// unchanged avoids submitting against a destroyed surface texture.
+    last_ct: Option<TextureViewId>,
     /// Constant material params (lana-avatar's PointMaterial p/q/r/s).
     p: [f32; 4],
     q: [f32; 4],
@@ -261,6 +268,7 @@ impl EngineApp for LanaKhora {
             start: Instant::now(),
             frames: 0,
             aspect: WIN_W as f32 / WIN_H as f32,
+            last_ct: None,
             p,
             q,
             r,
@@ -375,7 +383,16 @@ impl EngineApp for LanaKhora {
             d!("after_agents f{}: NO ColorTarget (occluded frame)", self.frames);
             return;
         };
-        d!("after_agents f{}: fctx+colortarget OK", self.frames);
+        // Stale-target guard: a successful begin_frame registers a fresh
+        // surface-view id; a failed one leaves the old (already-presented,
+        // destroyed) id. Same id as last submit ⇒ this frame's begin_frame
+        // didn't refresh it ⇒ skip, or we'd submit against a dead texture.
+        if self.last_ct == Some(color_target.0) {
+            d!("after_agents f{}: stale ColorTarget — skip", self.frames);
+            return;
+        }
+        self.last_ct = Some(color_target.0);
+        d!("after_agents f{}: fctx+colortarget OK (fresh)", self.frames);
 
         let mut encoder = device.create_command_encoder(Some("Lana Points Encoder"));
         {
