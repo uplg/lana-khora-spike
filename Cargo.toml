@@ -3,7 +3,8 @@ name = "lana-khora"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
-description = "Throwaway spike: Lana's point-cloud avatar viz rendered on KhoraEngine instead of Bevy. Proves a custom WGSL PointList pipeline can be driven from an external EngineApp without editing Khora."
+description = "Lana's point-cloud avatar viz rendered on KhoraEngine. Proves a custom WGSL PointList pipeline can be driven from an external EngineApp without editing Khora."
+license = "MIT OR Apache-2.0"
 publish = false
 
 [dependencies]
